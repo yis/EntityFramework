@@ -451,7 +451,7 @@ namespace Microsoft.EntityFrameworkCore.Query.ExpressionVisitors.Internal
 
             if (!EntityQueryModelVisitor.IsPropertyMethod(node.Method))
             {
-                base.VisitMethodCall(node);
+                return base.VisitMethodCall(node);
             }
 
             return
@@ -1020,7 +1020,8 @@ namespace Microsoft.EntityFrameworkCore.Query.ExpressionVisitors.Internal
 
                 if (whereClause.Predicate.Type == typeof(bool?))
                 {
-                    whereClause.Predicate = Expression.Convert(whereClause.Predicate, typeof(bool));
+                    // TODO: do the same in other places? (search conditions) and clean-up SqlGen?
+                    whereClause.Predicate = Expression.Equal(whereClause.Predicate, Expression.Constant(true, typeof(bool?)));
                 }
             }
 

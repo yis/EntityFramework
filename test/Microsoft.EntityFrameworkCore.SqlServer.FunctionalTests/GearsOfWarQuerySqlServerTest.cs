@@ -920,6 +920,17 @@ WHERE [g].[Discriminator] IN (N'Officer', N'Gear') AND LEN([g].[LeaderNickname])
                 Sql);
         }
 
+        public override void Null_propagation_optimization6()
+        {
+            base.Null_propagation_optimization6();
+
+            Assert.Equal(
+                @"SELECT [g].[Nickname], [g].[SquadId], [g].[AssignedCityName], [g].[CityOrBirthName], [g].[Discriminator], [g].[FullName], [g].[HasSoulPatch], [g].[LeaderNickname], [g].[LeaderSquadId], [g].[Rank]
+FROM [Gear] AS [g]
+WHERE [g].[Discriminator] IN (N'Officer', N'Gear') AND LEN([g].[LeaderNickname]) = 5",
+                Sql);
+        }
+
         public override void Select_null_propagation_negative1()
         {
             base.Select_null_propagation_negative1();
