@@ -3001,6 +3001,18 @@ ORDER BY [c].[City], [c].[CustomerID]",
                 Sql);
         }
 
+        public override void GroupJoin_with_different_outer_elements_with_same_key()
+        {
+            base.GroupJoin_with_different_outer_elements_with_same_key();
+
+            Assert.Equal(
+                @"SELECT [c].[CustomerID], [c].[Address], [c].[City], [c].[CompanyName], [c].[ContactName], [c].[ContactTitle], [c].[Country], [c].[Fax], [c].[Phone], [c].[PostalCode], [c].[Region], [o].[OrderID]
+FROM [Orders] AS [o]
+LEFT JOIN [Customers] AS [c] ON [o].[CustomerID] = [c].[CustomerID]
+ORDER BY [o].[CustomerID]",
+                Sql);
+        }
+
         public override void GroupJoin_simple()
         {
             base.GroupJoin_simple();
