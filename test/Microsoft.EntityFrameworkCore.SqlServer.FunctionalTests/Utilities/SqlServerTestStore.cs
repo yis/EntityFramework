@@ -34,24 +34,44 @@ namespace Microsoft.EntityFrameworkCore.SqlServer.FunctionalTests.Utilities
         ///     A non-transactional, transient, isolated test database. Use this in the case
         ///     where transactions are not appropriate.
         /// </summary>
-        public static Task<SqlServerTestStore> CreateScratchAsync(bool createDatabase = true)
-            => new SqlServerTestStore(GetScratchDbName()).CreateTransientAsync(createDatabase);
+        public static Task<SqlServerTestStore> CreateScratchAsync(bool createDatabase = true, bool useFileName = false)
+            => new SqlServerTestStore(GetScratchDbName(), useFileName).CreateTransientAsync(createDatabase);
 
-        public static SqlServerTestStore CreateScratch(bool createDatabase = true)
-            => new SqlServerTestStore(GetScratchDbName()).CreateTransient(createDatabase);
+        public static SqlServerTestStore CreateScratch(bool createDatabase = true, bool useFileName = false)
+            => new SqlServerTestStore(GetScratchDbName(), useFileName).CreateTransient(createDatabase);
 
         private SqlConnection _connection;
         private SqlTransaction _transaction;
         private readonly string _name;
+        private readonly string _fileName;
         private string _connectionString;
         private bool _deleteDatabase;
 
         public override string ConnectionString => _connectionString;
 
         // Use async static factory method
-        private SqlServerTestStore(string name)
+        private SqlServerTestStore(string name, bool useFileName = false)
         {
             _name = name;
+
+            if (useFileName)
+            {
+
+                #if NET451
+
+                var tempFolder = Environment.GetEnvironmentVariable("TEMP", EnvironmentVariableTarget.Machine);
+                _fileName = Path.Combine(tempFolder, name + ".mdf");
+
+                #else
+
+                // TODO: find proper temp directory on .NET Core. Using the current user's temp directory doesn't work,
+                // since the SQL Server Instance may not have access to it (running under different user credentials)...
+
+                _fileName = null;
+
+                #endif
+
+            }
         }
 
         private static string GetScratchDbName()
@@ -71,7 +91,7 @@ namespace Microsoft.EntityFrameworkCore.SqlServer.FunctionalTests.Utilities
         {
             CreateShared(typeof(SqlServerTestStore).Name + _name, initializeDatabase);
 
-            _connectionString = CreateConnectionString(_name);
+            _connectionString = CreateConnectionString(_name, _fileName);
             _connection = new SqlConnection(_connectionString);
 
             if (useTransaction)
@@ -185,7 +205,7 @@ namespace Microsoft.EntityFrameworkCore.SqlServer.FunctionalTests.Utilities
                 catch (SqlException e)
                 {
                     if (++retryCount >= 30
-                        || (e.Number != 233 && e.Number != -2 && e.Number != 4060))
+                        || (e.Number != 233 && e.Number != -2 && e.Number != 4060 && e.Number != 1832 && e.Number != 5120))
                     {
                         throw;
                     }
@@ -213,7 +233,7 @@ namespace Microsoft.EntityFrameworkCore.SqlServer.FunctionalTests.Utilities
                 catch (SqlException e)
                 {
                     if (++retryCount >= 30
-                        || (e.Number != 233 && e.Number != -2 && e.Number != 4060))
+                        || (e.Number != 233 && e.Number != -2 && e.Number != 4060 && e.Number != 1832 && e.Number != 5120))
                     {
                         throw;
                     }
@@ -227,7 +247,7 @@ namespace Microsoft.EntityFrameworkCore.SqlServer.FunctionalTests.Utilities
 
         private async Task<SqlServerTestStore> CreateTransientAsync(bool createDatabase)
         {
-            _connectionString = CreateConnectionString(_name);
+            _connectionString = CreateConnectionString(_name, _fileName);
             _connection = new SqlConnection(_connectionString);
 
             if (createDatabase)
@@ -239,6 +259,14 @@ namespace Microsoft.EntityFrameworkCore.SqlServer.FunctionalTests.Utilities
                     {
                         command.CommandTimeout = CommandTimeout;
                         command.CommandText = $"{Environment.NewLine}CREATE DATABASE [{_name}]";
+
+                        if (!string.IsNullOrEmpty(_fileName))
+                        {
+                            var logFileName = Path.ChangeExtension(_fileName, ".ldf");
+
+                            command.CommandText += $" ON (NAME = '{_name}', FILENAME = '{_fileName}')";
+                            command.CommandText += $" LOG ON (NAME = '{_name}_log', FILENAME = '{logFileName}')";
+                        }
 
                         await command.ExecuteNonQueryAsync();
 
@@ -254,7 +282,7 @@ namespace Microsoft.EntityFrameworkCore.SqlServer.FunctionalTests.Utilities
 
         private SqlServerTestStore CreateTransient(bool createDatabase)
         {
-            _connectionString = CreateConnectionString(_name);
+            _connectionString = CreateConnectionString(_name, _fileName);
             _connection = new SqlConnection(_connectionString);
 
             if (createDatabase)
@@ -266,6 +294,14 @@ namespace Microsoft.EntityFrameworkCore.SqlServer.FunctionalTests.Utilities
                     {
                         command.CommandTimeout = CommandTimeout;
                         command.CommandText = $"{Environment.NewLine}CREATE DATABASE [{_name}]";
+
+                        if (!string.IsNullOrEmpty(_fileName))
+                        {
+                            var logFileName = Path.ChangeExtension(_fileName, ".ldf");
+
+                            command.CommandText += $" ON (NAME = '{_name}', FILENAME = '{_fileName}')";
+                            command.CommandText += $" LOG ON (NAME = '{_name}_log', FILENAME = '{logFileName}')";
+                        }
 
                         command.ExecuteNonQuery();
 
@@ -429,13 +465,20 @@ namespace Microsoft.EntityFrameworkCore.SqlServer.FunctionalTests.Utilities
         }
 
         public static string CreateConnectionString(string name)
-            => CreateConnectionString(name, new Random().Next(0, 2) == 1);
+            => CreateConnectionString(name, null, new Random().Next(0, 2) == 1);
+
+        public static string CreateConnectionString(string name, string fileName)
+            => CreateConnectionString(name, fileName, new Random().Next(0, 2) == 1);
 
         private static string CreateConnectionString(string name, bool multipleActiveResultSets)
+            => CreateConnectionString(name, null, multipleActiveResultSets);
+
+        private static string CreateConnectionString(string name, string fileName, bool multipleActiveResultSets)
             => new SqlConnectionStringBuilder(TestEnvironment.DefaultConnection)
             {
                 MultipleActiveResultSets = multipleActiveResultSets,
-                InitialCatalog = name
+                AttachDBFilename = fileName ?? "",
+                InitialCatalog = name,
             }.ConnectionString;
     }
 }
