@@ -31,9 +31,31 @@ namespace Microsoft.EntityFrameworkCore.Query.ExpressionVisitors.Internal
         private readonly EntityQueryModelVisitor _queryModelVisitor;
         private readonly List<NavigationJoin> _navigationJoins = new List<NavigationJoin>();
         private readonly NavigationRewritingQueryModelVisitor _navigationRewritingQueryModelVisitor;
-        private readonly NavigationRewritingExpressionVisitor _parentvisitor;
-
+        //private readonly NavigationRewritingExpressionVisitor _parentvisitor;
         private QueryModel _queryModel;
+        private IAsyncQueryProvider _entityQueryProvider;
+        private NavigationRewritingExpressionVisitorState _sharedState;
+
+        /// <summary>
+        /// 
+        /// </summary>
+        public class NavigationRewritingExpressionVisitorState
+        {
+            /// <summary>
+            /// 
+            /// </summary>
+            public virtual bool InsideInnerSequence { get; set; }
+
+            /// <summary>
+            /// 
+            /// </summary>
+            public virtual bool InnerKeySelectorRequiresNullRefProtection { get; set; }
+
+            /// <summary>
+            /// 
+            /// </summary>
+            public virtual bool InsideInnerKeySelector { get; set; }
+        }
 
         private class NavigationJoin
         {
@@ -126,14 +148,12 @@ namespace Microsoft.EntityFrameworkCore.Query.ExpressionVisitors.Internal
                 => RemoveNavigationJoin(NavigationJoins, navigationJoin);
         }
 
-        private IAsyncQueryProvider _entityQueryProvider;
-
         /// <summary>
         ///     This API supports the Entity Framework Core infrastructure and is not intended to be used
         ///     directly from your code. This API may change or be removed in future releases.
         /// </summary>
         public NavigationRewritingExpressionVisitor([NotNull] EntityQueryModelVisitor queryModelVisitor)
-            : this(queryModelVisitor, false)
+            : this(queryModelVisitor, sharedState: null, navigationExpansionSubquery: false)
         {
         }
 
@@ -141,30 +161,35 @@ namespace Microsoft.EntityFrameworkCore.Query.ExpressionVisitors.Internal
         ///     This API supports the Entity Framework Core infrastructure and is not intended to be used
         ///     directly from your code. This API may change or be removed in future releases.
         /// </summary>
-        public NavigationRewritingExpressionVisitor([NotNull] EntityQueryModelVisitor queryModelVisitor, bool navigationExpansionSubquery)
+        public NavigationRewritingExpressionVisitor(
+            [NotNull] EntityQueryModelVisitor queryModelVisitor,
+            [CanBeNull] NavigationRewritingExpressionVisitorState sharedState,
+            bool navigationExpansionSubquery)
         {
             Check.NotNull(queryModelVisitor, nameof(queryModelVisitor));
 
             _queryModelVisitor = queryModelVisitor;
             _navigationRewritingQueryModelVisitor = new NavigationRewritingQueryModelVisitor(this, _queryModelVisitor, navigationExpansionSubquery);
+            _sharedState = sharedState ?? new NavigationRewritingExpressionVisitorState();
         }
 
         private NavigationRewritingExpressionVisitor(
             EntityQueryModelVisitor queryModelVisitor,
             IAsyncQueryProvider entityQueryProvider,
-            NavigationRewritingExpressionVisitor parentvisitor,
+            //NavigationRewritingExpressionVisitor parentvisitor,
+            NavigationRewritingExpressionVisitorState sharedState,
             bool navigationExpansionSubquery)
-            : this(queryModelVisitor, navigationExpansionSubquery)
+            : this(queryModelVisitor, sharedState, navigationExpansionSubquery)
         {
             _entityQueryProvider = entityQueryProvider;
-            _parentvisitor = parentvisitor;
+            //_parentvisitor = parentvisitor;
         }
 
         /// <summary>
         ///     This API supports the Entity Framework Core infrastructure and is not intended to be used
         ///     directly from your code. This API may change or be removed in future releases.
         /// </summary>
-        public virtual void Rewrite([NotNull] QueryModel queryModel)
+        public virtual void Rewrite([NotNull] QueryModel queryModel, [CanBeNull] QueryModel parentQueryModel)
         {
             Check.NotNull(queryModel, nameof(queryModel));
 
@@ -175,6 +200,11 @@ namespace Microsoft.EntityFrameworkCore.Query.ExpressionVisitors.Internal
             foreach (var navigationJoin in _navigationJoins)
             {
                 InsertNavigationJoin(navigationJoin);
+            }
+
+            if (parentQueryModel != null)
+            {
+                _queryModel = parentQueryModel;
             }
         }
 
@@ -202,7 +232,8 @@ namespace Microsoft.EntityFrameworkCore.Query.ExpressionVisitors.Internal
 
             if (_queryModel.MainFromClause == navigationJoin.QuerySource
                 || insertionIndex > 0
-                || _parentvisitor == null)
+            //    || _parentvisitor == null)
+            )
             {
                 foreach (var nj in navigationJoin.Iterate())
                 {
@@ -213,10 +244,10 @@ namespace Microsoft.EntityFrameworkCore.Query.ExpressionVisitors.Internal
                     }
                 }
             }
-            else
-            {
-                _parentvisitor.InsertNavigationJoin(navigationJoin);
-            }
+            //else
+            //{
+            //    _parentvisitor.InsertNavigationJoin(navigationJoin);
+            //}
         }
 
         /// <summary>
@@ -225,9 +256,9 @@ namespace Microsoft.EntityFrameworkCore.Query.ExpressionVisitors.Internal
         /// </summary>
         protected override Expression VisitSubQuery(SubQueryExpression expression)
         {
-            var navigationRewritingExpressionVisitor = CreateVisitorForSubQuery();
-
-            navigationRewritingExpressionVisitor.Rewrite(expression.QueryModel);
+            //var navigationRewritingExpressionVisitor = CreateVisitorForSubQuery();
+            //navigationRewritingExpressionVisitor.Rewrite(expression.QueryModel);
+            Rewrite(expression.QueryModel, _queryModel);
 
             return expression;
         }
@@ -243,12 +274,12 @@ namespace Microsoft.EntityFrameworkCore.Query.ExpressionVisitors.Internal
                 _entityQueryProvider
                     = (node.Value as IQueryable)?.Provider as IAsyncQueryProvider;
 
-                var parent = _parentvisitor;
-                while (parent != null)
-                {
-                    parent._entityQueryProvider = _entityQueryProvider;
-                    parent = parent._parentvisitor;
-                }
+                //var parent = _parentvisitor;
+                //while (parent != null)
+                //{
+                //    parent._entityQueryProvider = _entityQueryProvider;
+                //    parent = parent._parentvisitor;
+                //}
             }
 
             return node;
@@ -406,7 +437,7 @@ namespace Microsoft.EntityFrameworkCore.Query.ExpressionVisitors.Internal
         {
             Check.NotNull(node, nameof(node));
 
-            return
+            var result =
                 _queryModelVisitor.BindNavigationPathPropertyExpression(
                     node,
                     (ps, qs) =>
@@ -419,8 +450,18 @@ namespace Microsoft.EntityFrameworkCore.Query.ExpressionVisitors.Internal
                             node.Type,
                             e => Expression.MakeMemberAccess(e, node.Member),
                             e => new NullConditionalExpression(e, e, Expression.MakeMemberAccess(e, node.Member)));
-                    })
-                ?? base.VisitMember(node);
+                    });
+
+            if (result != null)
+            {
+                return result;
+            }
+
+            var newEpression = Visit(node.Expression);
+
+            return _sharedState.InsideInnerKeySelector && _sharedState.InnerKeySelectorRequiresNullRefProtection
+                ? (Expression)new NullConditionalExpression(newEpression, newEpression, Expression.MakeMemberAccess(newEpression, node.Member))
+                : Expression.MakeMemberAccess(newEpression, node.Member);
         }
 
         /// <summary>
@@ -494,10 +535,16 @@ namespace Microsoft.EntityFrameworkCore.Query.ExpressionVisitors.Internal
                             e => new NullConditionalExpression(e, e, Expression.Call(node.Method, e, node.Arguments[1])));
                     });
 
-                    if (result != null)
-                    {
-                        return result;
-                    }
+                if (result != null)
+                {
+                    return result;
+                }
+
+                var propertyArguments = node.Arguments.Select(Visit).ToList();
+
+                return _sharedState.InsideInnerKeySelector && _sharedState.InnerKeySelectorRequiresNullRefProtection
+                    ? (Expression)new NullConditionalExpression(propertyArguments[0], propertyArguments[0], Expression.Call(node.Method, propertyArguments[0], node.Arguments[1]))
+                    : Expression.Call(node.Method, propertyArguments[0], propertyArguments[1]);
             }
 
             var newObject = Visit(node.Object);
@@ -549,7 +596,7 @@ namespace Microsoft.EntityFrameworkCore.Query.ExpressionVisitors.Internal
                     }
                 }
 
-                if (_navigationRewritingQueryModelVisitor.InsideInnerKeySelector)
+                if (_sharedState.InsideInnerKeySelector)
                 {
                     var translated = CreateSubqueryForNavigations(
                         outerQuerySourceReferenceExpression,
@@ -649,7 +696,7 @@ namespace Microsoft.EntityFrameworkCore.Query.ExpressionVisitors.Internal
             if (navigations.Count > 1)
             {
                 var subQueryVisitor = CreateVisitorForSubQuery(navigationExpansionSubquery: true);
-                subQueryVisitor.Rewrite(subQueryModel);
+                subQueryVisitor.Rewrite(subQueryModel, parentQueryModel: null);
             }
 
             var subQuery = new SubQueryExpression(subQueryModel);
@@ -657,19 +704,24 @@ namespace Microsoft.EntityFrameworkCore.Query.ExpressionVisitors.Internal
             return subQuery;
         }
 
-        /// <summary>
-        ///     This API supports the Entity Framework Core infrastructure and is not intended to be used
-        ///     directly from your code. This API may change or be removed in future releases.
-        /// </summary>
-        public virtual NavigationRewritingExpressionVisitor CreateVisitorForSubQuery()
-            => CreateVisitorForSubQuery(false);
+        ///// <summary>
+        /////     This API supports the Entity Framework Core infrastructure and is not intended to be used
+        /////     directly from your code. This API may change or be removed in future releases.
+        ///// </summary>
+        //public virtual NavigationRewritingExpressionVisitor CreateVisitorForSubQuery()
+        //    => CreateVisitorForSubQuery(navigationExpansionSubquery: false);
 
         /// <summary>
         ///     This API supports the Entity Framework Core infrastructure and is not intended to be used
         ///     directly from your code. This API may change or be removed in future releases.
         /// </summary>
         public virtual NavigationRewritingExpressionVisitor CreateVisitorForSubQuery(bool navigationExpansionSubquery)
-            => new NavigationRewritingExpressionVisitor(_queryModelVisitor, _entityQueryProvider, this, navigationExpansionSubquery);
+            => new NavigationRewritingExpressionVisitor(
+                _queryModelVisitor, 
+                _entityQueryProvider, 
+                //this,
+                navigationExpansionSubquery ? null : _sharedState, 
+                navigationExpansionSubquery);
 
         private static BinaryExpression CreateKeyComparisonExpression(Expression leftExpression, Expression rightExpression)
         {
@@ -702,7 +754,8 @@ namespace Microsoft.EntityFrameworkCore.Query.ExpressionVisitors.Internal
         {
             var querySourceReferenceExpression = outerQuerySourceReferenceExpression;
             var navigationJoins = _navigationJoins;
-            var optionalNavigationInChain = false;
+            var optionalNavigationInChain = _sharedState.InsideInnerKeySelector 
+                && _sharedState.InnerKeySelectorRequiresNullRefProtection;
 
             foreach (var navigation in navigations)
             {
@@ -758,7 +811,7 @@ namespace Microsoft.EntityFrameworkCore.Query.ExpressionVisitors.Internal
                         out innerQuerySourceReferenceExpression);
 
                     var additionalBodyClauses = new List<IBodyClause>();
-                    if (optionalNavigationInChain || !navigation.ForeignKey.IsRequired)
+                    if (optionalNavigationInChain)
                     {
                         var groupJoinClause
                             = new GroupJoinClause(
@@ -807,6 +860,11 @@ namespace Microsoft.EntityFrameworkCore.Query.ExpressionVisitors.Internal
 
                 querySourceReferenceExpression = navigationJoin.QuerySourceReferenceExpression;
                 navigationJoins = navigationJoin.NavigationJoins;
+            }
+
+            if (_sharedState.InsideInnerSequence && optionalNavigationInChain)
+            {
+                _sharedState.InnerKeySelectorRequiresNullRefProtection = true;
             }
 
             if (propertyType == null)
@@ -1005,17 +1063,15 @@ namespace Microsoft.EntityFrameworkCore.Query.ExpressionVisitors.Internal
                 : expression;
         }
 
-        private class NavigationRewritingQueryModelVisitor : ExpressionTransformingQueryModelVisitor
+        private class NavigationRewritingQueryModelVisitor : ExpressionTransformingQueryModelVisitor<NavigationRewritingExpressionVisitor>
         {
             private readonly SubqueryInjector _subqueryInjector;
             private readonly bool _navigationExpansionSubquery;
 
-            public bool InsideInnerKeySelector { get; private set; }
-
             public AdditionalFromClause AdditionalFromClauseBeingProcessed { get; private set; }
 
             public NavigationRewritingQueryModelVisitor(
-                RelinqExpressionVisitor transformingVisitor,
+                NavigationRewritingExpressionVisitor transformingVisitor,
                 EntityQueryModelVisitor queryModelVisitor,
                 bool navigationExpansionSubquery)
                 : base(transformingVisitor)
@@ -1064,11 +1120,17 @@ namespace Microsoft.EntityFrameworkCore.Query.ExpressionVisitors.Internal
 
             private void VisitJoinClauseInternal(JoinClause joinClause)
             {
+                var oldInsideInnerSequence = TransformingVisitor._sharedState.InsideInnerSequence;
+                var oldInnerKeySelectorRequiresNullRefProtection = TransformingVisitor._sharedState.InnerKeySelectorRequiresNullRefProtection;
+                TransformingVisitor._sharedState.InsideInnerSequence = true;
+                TransformingVisitor._sharedState.InnerKeySelectorRequiresNullRefProtection = false;
                 joinClause.InnerSequence = TransformingVisitor.Visit(joinClause.InnerSequence);
+                TransformingVisitor._sharedState.InsideInnerSequence = oldInsideInnerSequence;
+
                 joinClause.OuterKeySelector = TransformingVisitor.Visit(joinClause.OuterKeySelector);
 
-                var oldInsideInnerKeySelector = InsideInnerKeySelector;
-                InsideInnerKeySelector = true;
+                var oldInsideInnerKeySelector = TransformingVisitor._sharedState.InsideInnerKeySelector;
+                TransformingVisitor._sharedState.InsideInnerKeySelector = true;
                 joinClause.InnerKeySelector = TransformingVisitor.Visit(joinClause.InnerKeySelector);
 
                 if (joinClause.OuterKeySelector.Type.IsNullableType()
@@ -1083,7 +1145,8 @@ namespace Microsoft.EntityFrameworkCore.Query.ExpressionVisitors.Internal
                     joinClause.OuterKeySelector = Expression.Convert(joinClause.OuterKeySelector, joinClause.OuterKeySelector.Type.MakeNullable());
                 }
 
-                InsideInnerKeySelector = oldInsideInnerKeySelector;
+                TransformingVisitor._sharedState.InsideInnerKeySelector = oldInsideInnerKeySelector;
+                TransformingVisitor._sharedState.InnerKeySelectorRequiresNullRefProtection = oldInnerKeySelectorRequiresNullRefProtection;
             }
 
             public override void VisitSelectClause(SelectClause selectClause, QueryModel queryModel)
