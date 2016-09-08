@@ -56,21 +56,14 @@ namespace Microsoft.EntityFrameworkCore.SqlServer.FunctionalTests.Utilities
 
             if (useFileName)
             {
+                _fileName = Path.Combine(
+#if NET451
+                    AppDomain.CurrentDomain.BaseDirectory,
+#else
+                    AppContext.BaseDirectory,
+#endif
 
-                #if NET451
-
-                var tempFolder = Environment.GetEnvironmentVariable("TEMP", EnvironmentVariableTarget.Machine);
-                _fileName = Path.Combine(tempFolder, name + ".mdf");
-
-                #else
-
-                // TODO: find proper temp directory on .NET Core. Using the current user's temp directory doesn't work,
-                // since the SQL Server Instance may not have access to it (running under different user credentials)...
-
-                _fileName = null;
-
-                #endif
-
+                    name + ".mdf");
             }
         }
 
@@ -262,10 +255,12 @@ namespace Microsoft.EntityFrameworkCore.SqlServer.FunctionalTests.Utilities
 
                         if (!string.IsNullOrEmpty(_fileName))
                         {
-                            var logFileName = Path.ChangeExtension(_fileName, ".ldf");
+                            var logFileName = Path.Combine(
+                                Path.GetDirectoryName(_fileName),
+                                _name + "_log.ldf");
 
-                            command.CommandText += $" ON (NAME = '{_name}', FILENAME = '{_fileName}')";
-                            command.CommandText += $" LOG ON (NAME = '{_name}_log', FILENAME = '{logFileName}')";
+                            command.CommandText += $" ON (NAME = '{_name}.mdf', FILENAME = '{_fileName}')";
+                            command.CommandText += $" LOG ON (NAME = '{_name}_log.ldf', FILENAME = '{logFileName}')";
                         }
 
                         await command.ExecuteNonQueryAsync();
@@ -297,10 +292,12 @@ namespace Microsoft.EntityFrameworkCore.SqlServer.FunctionalTests.Utilities
 
                         if (!string.IsNullOrEmpty(_fileName))
                         {
-                            var logFileName = Path.ChangeExtension(_fileName, ".ldf");
+                            var logFileName = Path.Combine(
+                                Path.GetDirectoryName(_fileName),
+                                _name + "_log.ldf");
 
-                            command.CommandText += $" ON (NAME = '{_name}', FILENAME = '{_fileName}')";
-                            command.CommandText += $" LOG ON (NAME = '{_name}_log', FILENAME = '{logFileName}')";
+                            command.CommandText += $" ON (NAME = '{_name}.mdf', FILENAME = '{_fileName}')";
+                            command.CommandText += $" LOG ON (NAME = '{_name}_log.ldf', FILENAME = '{logFileName}')";
                         }
 
                         command.ExecuteNonQuery();
@@ -474,11 +471,19 @@ namespace Microsoft.EntityFrameworkCore.SqlServer.FunctionalTests.Utilities
             => CreateConnectionString(name, null, multipleActiveResultSets);
 
         private static string CreateConnectionString(string name, string fileName, bool multipleActiveResultSets)
-            => new SqlConnectionStringBuilder(TestEnvironment.DefaultConnection)
+        {
+            var builder = new SqlConnectionStringBuilder(TestEnvironment.DefaultConnection)
             {
                 MultipleActiveResultSets = multipleActiveResultSets,
-                AttachDBFilename = fileName ?? "",
-                InitialCatalog = name,
-            }.ConnectionString;
+                InitialCatalog = name
+            };
+            if (fileName != null)
+            {
+                builder.UserInstance = true;
+                builder.AttachDBFilename = fileName;
+            }
+
+            return builder.ConnectionString;
+        }
     }
 }

@@ -536,51 +536,36 @@ namespace Microsoft.EntityFrameworkCore.SqlServer.Tests.Migrations
         [Fact]
         public virtual void CreateDatabaseOperation_with_filename()
         {
-            Generate(new SqlServerCreateDatabaseOperation { Name = "Northwind", FileName = "C:\\Narf.mdf" });
+            Generate(new SqlServerCreateDatabaseOperation { Name = "Northwind", FileName = @"C:\Narf.mdf" });
 
             Assert.Equal(
-                "CREATE DATABASE [Northwind] ON (NAME = 'Narf', FILENAME = 'C:\\Narf.mdf') LOG ON (NAME = 'Narf_log', FILENAME = 'C:\\Narf.ldf');" + EOL +
+                "CREATE DATABASE [Northwind]" + EOL +
+                @"ON (NAME = 'Narf.mdf', FILENAME = 'C:\Narf.mdf')" + EOL +
+                @"LOG ON (NAME = 'Narf_log.ldf', FILENAME = 'C:\Narf_log.ldf');" + EOL +
                 "GO" + EOL +
                 EOL +
-                "IF SERVERPROPERTY('EngineEdition') <> 5 EXEC(N'ALTER DATABASE [Northwind] SET READ_COMMITTED_SNAPSHOT ON');" + EOL,
+                "IF SERVERPROPERTY('EngineEdition') <> 5 EXEC(N'ALTER DATABASE [Northwind] SET READ_COMMITTED_SNAPSHOT ON;');" + EOL,
                 Sql);
         }
 
 #if NET451
-
         [Fact]
         public virtual void CreateDatabaseOperation_with_filename_and_datadirectory()
         {
             Generate(new SqlServerCreateDatabaseOperation { Name = "Northwind", FileName = "|DataDirectory|Narf.mdf" });
 
             var expectedFile = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Narf.mdf");
-            var expectedLog = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Narf.ldf");
+            var expectedLog = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Narf_log.ldf");
 
             Assert.Equal(
-                "CREATE DATABASE [Northwind] ON (NAME = 'Narf', FILENAME = '" + expectedFile + "') LOG ON (NAME = 'Narf_log', FILENAME = '" + expectedLog + "');" + EOL +
+                "CREATE DATABASE [Northwind]" + EOL +
+                "ON (NAME = 'Narf.mdf', FILENAME = '" + expectedFile + "')" + EOL +
+                "LOG ON (NAME = 'Narf_log.ldf', FILENAME = '" + expectedLog + "');" + EOL +
                 "GO" + EOL +
                 EOL +
-                "IF SERVERPROPERTY('EngineEdition') <> 5 EXEC(N'ALTER DATABASE [Northwind] SET READ_COMMITTED_SNAPSHOT ON');" + EOL,
+                "IF SERVERPROPERTY('EngineEdition') <> 5 EXEC(N'ALTER DATABASE [Northwind] SET READ_COMMITTED_SNAPSHOT ON;');" + EOL,
                 Sql);
         }
-
-        [Fact]
-        public virtual void CreateDatabaseOperation_with_filename_and_custom_datadirectory()
-        {
-            AppDomain.CurrentDomain.SetData("DataDirectory", "C:\\Data");
-
-            Generate(new SqlServerCreateDatabaseOperation { Name = "Northwind", FileName = "|DataDirectory|Narf.mdf" });
-
-            AppDomain.CurrentDomain.SetData("DataDirectory", null);
-
-            Assert.Equal(
-                "CREATE DATABASE [Northwind] ON (NAME = 'Narf', FILENAME = 'C:\\Data\\Narf.mdf') LOG ON (NAME = 'Narf_log', FILENAME = 'C:\\Data\\Narf.ldf');" + EOL +
-                "GO" + EOL +
-                EOL +
-                "IF SERVERPROPERTY('EngineEdition') <> 5 EXEC(N'ALTER DATABASE [Northwind] SET READ_COMMITTED_SNAPSHOT ON');" + EOL,
-                Sql);
-        }
-
 #endif
 
         public override void CreateIndexOperation_nonunique()

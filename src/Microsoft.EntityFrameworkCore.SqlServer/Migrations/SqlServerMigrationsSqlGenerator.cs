@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
 
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -487,17 +488,21 @@ namespace Microsoft.EntityFrameworkCore.Migrations
             if (!string.IsNullOrEmpty(operation.FileName))
             {
                 var fileName = ExpandFileName(operation.FileName);
-                var name = Path.GetFileNameWithoutExtension(fileName);
+                var name = Path.GetFileName(fileName);
 
-                var logFileName = Path.ChangeExtension(fileName, ".ldf");
-                var logName = name + "_log";
+                var logFileName = Path.Combine(
+                    Path.GetDirectoryName(fileName),
+                    Path.GetFileNameWithoutExtension(fileName) + "_log.ldf");
+                var logName = Path.GetFileName(logFileName);
 
                 builder
-                    .Append(" ON (NAME = '")
+                    .AppendLine()
+                    .Append("ON (NAME = '")
                     .Append(SqlGenerationHelper.EscapeLiteral(name))
                     .Append("', FILENAME = '")
                     .Append(SqlGenerationHelper.EscapeLiteral(fileName))
-                    .Append("') LOG ON (NAME = '")
+                    .AppendLine("')")
+                    .Append("LOG ON (NAME = '")
                     .Append(SqlGenerationHelper.EscapeLiteral(logName))
                     .Append("', FILENAME = '")
                     .Append(SqlGenerationHelper.EscapeLiteral(logFileName))
@@ -518,18 +523,18 @@ namespace Microsoft.EntityFrameworkCore.Migrations
 
         private static string ExpandFileName(string fileName)
         {
-            Check.NotNull(fileName, nameof(fileName));
+            Debug.Assert(!string.IsNullOrEmpty(fileName), "fileName is null or empty.");
 
 #if NET451
-
             if (fileName.StartsWith("|DataDirectory|", StringComparison.OrdinalIgnoreCase))
             {
                 var dataDirectory = AppDomain.CurrentDomain.GetData("DataDirectory") as string;
                 if (string.IsNullOrEmpty(dataDirectory))
+                {
                     dataDirectory = AppDomain.CurrentDomain.BaseDirectory;
-                fileName = Path.Combine(dataDirectory, fileName.Substring("|DataDirectory|".Length));
+                }
+                fileName = Path.Combine(dataDirectory, fileName.Substring(15));
             }
-
 #endif
 
             return Path.GetFullPath(fileName);
