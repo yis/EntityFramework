@@ -206,7 +206,7 @@ namespace Microsoft.EntityFrameworkCore.Query.Sql
 
             if (selectExpression.IsProjectStar)
             {
-                var tableAlias = selectExpression.ProjectStarAlias ?? selectExpression.Tables.Last().Alias;
+                var tableAlias = selectExpression.Tables.Last().Alias;
 
                 _relationalCommandBuilder
                     .Append(_sqlGenerationHelper.DelimitIdentifier(tableAlias))
@@ -215,14 +215,24 @@ namespace Microsoft.EntityFrameworkCore.Query.Sql
                 projectionAdded = true;
             }
 
-            if (selectExpression.Projection.Any())
+            if (selectExpression.Projection.Count == 1
+                && selectExpression.Projection.First().IsStarProjectionExpression()
+                && selectExpression.Alias != null)
+            {
+                var starProjectionExpression = selectExpression.Projection.First().TryGetColumnExpression();
+                _relationalCommandBuilder.Append(_sqlGenerationHelper.DelimitIdentifier(starProjectionExpression.TableAlias))
+                    .Append(".*");
+
+                projectionAdded = true;
+            }
+            else if (selectExpression.Projection.Any(p => !p.IsStarProjectionExpression()))
             {
                 if (selectExpression.IsProjectStar)
                 {
                     _relationalCommandBuilder.Append(", ");
                 }
 
-                VisitProjection(selectExpression.Projection);
+                VisitProjection(selectExpression.Projection.Where(p => !p.IsStarProjectionExpression()).ToList());
 
                 projectionAdded = true;
             }
@@ -1539,7 +1549,7 @@ namespace Microsoft.EntityFrameworkCore.Query.Sql
             switch (expression.NodeType)
             {
                 case ExpressionType.Add:
-                    return expression.Type == typeof(string) ? " " + ConcatOperator + " " : " + ";
+                return expression.Type == typeof(string) ? " " + ConcatOperator + " " : " + ";
                 case ExpressionType.Extension:
                 {
                     var asStringCompareExpression = expression as StringCompareExpression;
@@ -1823,13 +1833,13 @@ namespace Microsoft.EntityFrameworkCore.Query.Sql
                         switch (expression.NodeType)
                         {
                             case ExpressionType.Not:
-                                return Expression.Condition(
-                                    operand,
-                                    Expression.Constant(false, typeof(bool)),
-                                    Expression.Constant(true, typeof(bool)));
+                            return Expression.Condition(
+                                operand,
+                                Expression.Constant(false, typeof(bool)),
+                                Expression.Constant(true, typeof(bool)));
                             case ExpressionType.Convert:
                             case ExpressionType.ConvertChecked:
-                                return Expression.MakeUnary(expression.NodeType, operand, expression.Type);
+                            return Expression.MakeUnary(expression.NodeType, operand, expression.Type);
                         }
 
                         return Expression.Condition(

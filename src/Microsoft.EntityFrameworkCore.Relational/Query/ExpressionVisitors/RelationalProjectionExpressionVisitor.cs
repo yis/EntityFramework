@@ -130,7 +130,7 @@ namespace Microsoft.EntityFrameworkCore.Query.ExpressionVisitors
                 && !(node is ConstantExpression)
                 && (selectExpression != null))
             {
-                var existingProjectionsCount = selectExpression.Projection.Count;
+                var existingProjectionsCount = selectExpression.Projection.Count(p => !p.IsStarProjectionExpression());
 
                 var sqlExpression
                     = _sqlTranslatingExpressionVisitorFactory
@@ -146,9 +146,14 @@ namespace Microsoft.EntityFrameworkCore.Query.ExpressionVisitors
                     }
                     else
                     {
-                        if (QueryModelVisitor.ParentQueryModelVisitor != null)
+                        if (QueryModelVisitor.ParentQueryModelVisitor != null
+                            && !selectExpression.Projection.Any())
                         {
-                            selectExpression.SetTableForProjectStar(qsre.ReferencedQuerySource);
+                            selectExpression.AddToProjection(
+                                new ColumnExpression(
+                                    "*",
+                                    typeof(object),
+                                    selectExpression.GetTableForQuerySource(qsre.ReferencedQuerySource)));
                         }
                     }
                 }

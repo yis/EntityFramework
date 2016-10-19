@@ -431,7 +431,7 @@ namespace Microsoft.EntityFrameworkCore.Query
                     : null;
 
             var previousSelectProjectionCount
-                = previousSelectExpression?.Projection.Count ?? -1;
+                = previousSelectExpression?.Projection?.Count(p => !p.IsStarProjectionExpression()) ?? -1;
 
             base.VisitAdditionalFromClause(fromClause, queryModel, index);
 
@@ -661,7 +661,7 @@ namespace Microsoft.EntityFrameworkCore.Query
                     : null;
 
             var previousSelectProjectionCount
-                = previousSelectExpression?.Projection.Count ?? -1;
+                = previousSelectExpression?.Projection?.Count(p => !p.IsStarProjectionExpression()) ?? -1;
 
             var previousParameter = CurrentParameter;
             var previousMapping = SnapshotQuerySourceMapping(queryModel);
@@ -762,7 +762,7 @@ namespace Microsoft.EntityFrameworkCore.Query
                                             .ReplaceMapping(mapping.Key, mapping.Value);
                                     }
 
-                                    var previousProjectionCount = previousSelectExpression.Projection.Count;
+                                    var previousProjectionCount = previousSelectExpression.Projection.Count(p => !p.IsStarProjectionExpression());
 
                                     base.VisitJoinClause(joinClause, queryModel, index);
 

@@ -81,8 +81,8 @@ namespace Microsoft.EntityFrameworkCore.Query.Expressions
 
         public virtual string ProjectStarAlias { get; [param: CanBeNull] set; }
 
-        public virtual void SetTableForProjectStar([NotNull] IQuerySource querySource)
-            => ProjectStarAlias = GetTableForQuerySource(querySource)?.Alias;
+        //public virtual void SetTableForProjectStar([NotNull] IQuerySource querySource)
+        //    => ProjectStarAlias = GetTableForQuerySource(querySource)?.Alias;
 
         /// <summary>
         ///     Type of this expression.
@@ -150,7 +150,7 @@ namespace Microsoft.EntityFrameworkCore.Query.Expressions
                && Predicate == null
                && Limit == null
                && Offset == null
-               && Projection.Count == 0
+               && (Projection.Count == 0 || Projection.All(p => p.IsStarProjectionExpression()))
                && OrderBy.Count == 0
                && Tables.Count == 1;
 
@@ -568,6 +568,8 @@ namespace Microsoft.EntityFrameworkCore.Query.Expressions
 
             if (projectionIndex == -1)
             {
+                RemoveStarProjectionExpression();
+
                 // Alias != null means SelectExpression in subquery which needs projections to have unique aliases
                 if (Alias != null
                     || columnExpression == null)
@@ -744,6 +746,14 @@ namespace Microsoft.EntityFrameworkCore.Query.Expressions
             if (index < _projection.Count)
             {
                 _projection.RemoveRange(index, _projection.Count - index);
+            }
+        }
+
+        private void RemoveStarProjectionExpression()
+        {
+            if (_projection.LastOrDefault()?.IsStarProjectionExpression() == true)
+            {
+                _projection.RemoveAt(_projection.Count - 1);
             }
         }
 
