@@ -280,6 +280,7 @@ namespace Microsoft.EntityFrameworkCore.Query.Expressions
                 if (_offset != null)
                 {
                     PushDownSubquery();
+                    ClearOrderBy();
                 }
 
                 _isDistinct = value;
@@ -322,32 +323,6 @@ namespace Microsoft.EntityFrameworkCore.Query.Expressions
                     && value != null)
                 {
                     var subquery = PushDownSubquery();
-
-                    subquery._offset = null;
-
-                    foreach (var ordering in subquery.OrderBy)
-                    {
-                        var aliasExpression = ordering.Expression as AliasExpression;
-
-                        if (aliasExpression != null)
-                        {
-                            if (aliasExpression.Alias != null)
-                            {
-                                _orderBy.Add(
-                                    new Ordering(
-                                        new ColumnExpression(aliasExpression.Alias, aliasExpression.Type, subquery),
-                                        ordering.OrderingDirection));
-                            }
-                            else
-                            {
-                                var expression = UpdateColumnExpression(aliasExpression.Expression, subquery);
-
-                                _orderBy.Add(
-                                    new Ordering(
-                                        new AliasExpression(expression), ordering.OrderingDirection));
-                            }
-                        }
-                    }
                 }
 
                 _offset = value;
@@ -432,6 +407,50 @@ namespace Microsoft.EntityFrameworkCore.Query.Expressions
             ClearOrderBy();
 
             AddTable(subquery, createUniqueAlias: false);
+
+            foreach (var ordering in subquery.OrderBy)
+            {
+                var expression = ordering.Expression;
+
+                var aliasExpression = expression as AliasExpression;
+                if (aliasExpression != null)
+                {
+                    if (aliasExpression.Alias != null)
+                    {
+                        _orderBy.Add(
+                            new Ordering(
+                                new ColumnExpression(aliasExpression.Alias, aliasExpression.Type, subquery),
+                                ordering.OrderingDirection));
+                    }
+                    else
+                    {
+                        var newExpression = UpdateColumnExpression(aliasExpression.Expression, subquery);
+
+                        _orderBy.Add(
+                            new Ordering(
+                                new AliasExpression(newExpression), ordering.OrderingDirection));
+                    }
+                }
+                else
+                {
+                    if (!subquery.IsProjectStar)
+                    {
+                        subquery.AddToProjection(expression);
+                    }
+
+                    var newExpression = UpdateColumnExpression(expression, subquery);
+
+                    _orderBy.Add(
+                            new Ordering(
+                                new AliasExpression(newExpression), ordering.OrderingDirection));
+                }
+            }
+
+            if (subquery.Limit == null
+                && subquery.Offset == null)
+            {
+                subquery.ClearOrderBy();
+            }
 
             return subquery;
         }
