@@ -3,6 +3,7 @@
 
 using System;
 using System.Linq;
+using Microsoft.EntityFrameworkCore.Internal;
 using Microsoft.EntityFrameworkCore.Specification.Tests;
 using Microsoft.EntityFrameworkCore.Specification.Tests.TestModels.Northwind;
 using Microsoft.EntityFrameworkCore.Specification.Tests.TestUtilities.Xunit;
@@ -6316,6 +6317,27 @@ CROSS APPLY (
 ) AS [t4]
 WHERE (([c].[City] = N'Seattle') AND [c].[City] IS NOT NULL) AND ([t1].[OrderID] IS NOT NULL AND [t4].[OrderID] IS NOT NULL)",
                 Sql);
+        }
+
+        public override void Paging_operation_without_orderby_issues_warning()
+        {
+            base.Paging_operation_without_orderby_issues_warning();
+
+            Assert.True(TestSqlLoggerFactory.Log.Contains(CoreStrings.PagingOperationWithoutOrderBy("Customer")));
+        }
+
+        public override void Paging_operation_without_orderby_issues_warning_subquery()
+        {
+            base.Paging_operation_without_orderby_issues_warning_subquery();
+
+            Assert.True(TestSqlLoggerFactory.Log.Contains(CoreStrings.PagingOperationWithoutOrderBy("Order")));
+        }
+
+        public override void Single_SingleOrDefault_without_orderby_doesnt_issue_warning()
+        {
+            base.Single_SingleOrDefault_without_orderby_doesnt_issue_warning();
+
+            Assert.False(TestSqlLoggerFactory.Log.Contains(CoreStrings.PagingOperationWithoutOrderBy("Customer")));
         }
 
         private const string FileLineEnding = @"

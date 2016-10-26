@@ -1456,6 +1456,14 @@ namespace Microsoft.EntityFrameworkCore.Internal
             return string.Format(CultureInfo.CurrentCulture, GetString("PropertyCalledOnNavigation", "property", "entityType"), property, entityType);
         }
 
+        /// <summary>
+        /// Query on '{querySourceType}' uses paging operation (First/FirstOrDefault/Skip/Take) without OrderBy which may lead to unpredictable results.
+        /// </summary>
+        public static string PagingOperationWithoutOrderBy([CanBeNull] object querySourceType)
+        {
+            return string.Format(CultureInfo.CurrentCulture, GetString("PagingOperationWithoutOrderBy", "querySourceType"), querySourceType);
+        }
+
         private static string GetString(string name, params string[] formatterNames)
         {
             var value = _resourceManager.GetString(name);

@@ -659,6 +659,14 @@ namespace Microsoft.EntityFrameworkCore.Query
         {
             Check.NotNull(queryModel, nameof(queryModel));
 
+            if (queryModel.ResultOperators.Any(o => o is FirstResultOperator || o is SkipResultOperator || o is TakeResultOperator)
+                && !queryModel.BodyClauses.OfType<OrderByClause>().Any())
+            {
+                QueryCompilationContext.Logger.LogWarning(
+                    CoreEventId.CompilingQueryModel,
+                    () => CoreStrings.PagingOperationWithoutOrderBy(queryModel.MainFromClause.ItemType.Name));
+            }
+
             base.VisitQueryModel(queryModel);
 
             if (_blockTaskExpressions)

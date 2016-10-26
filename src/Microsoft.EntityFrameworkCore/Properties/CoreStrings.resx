@@ -657,4 +657,7 @@
   <data name="PropertyCalledOnNavigation" xml:space="preserve">
     <value>Cannot call Property for the property '{property}' on entity type '{entityType}' because it is configured as a navigation property. Property can only be used to configure scalar properties.</value>
   </data>
+  <data name="PagingOperationWithoutOrderBy" xml:space="preserve">
+    <value>Query on '{querySourceType}' uses paging operation (First/FirstOrDefault/Skip/Take) without OrderBy which may lead to unpredictable results.</value>
+  </data>
 </root>
